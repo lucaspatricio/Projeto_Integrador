@@ -1,17 +1,103 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { StatCard } from "../../components/Stats.jsx";
-import { Activity, ArrowRight, CalendarCheck, Check, Clock3, CreditCard, Dumbbell, Flame, HeartPulse, Target } from "lucide-react";
+import { studentService } from "./student.service.js";
+import { apiRequest } from "../../lib/api/client.js";
+import {
+  Activity, ArrowRight, CalendarCheck, Check, Clock3, CreditCard,
+  Dumbbell, Flame, HeartPulse, Target,
+} from "lucide-react";
 
 export default function StudentOverview() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [checkedIn, setCheckedIn] = useState(false);
+  const [checking, setChecking] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        const res = await studentService.getDashboard();
+        setData(res);
+      } catch (err) {
+        setError(err.message || "Erro ao carregar dashboard.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  async function fazerCheckin() {
+    if (checkedIn || checking) return;
+    try {
+      setChecking(true);
+      await apiRequest("/aluno/checkin", { method: "POST" });
+      setCheckedIn(true);
+    } catch (err) {
+      setError(err.message || "Erro ao fazer check-in.");
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  const plano = data?.plano || { tipo: "—", vencimento: null, status: "—" };
+  const m = data?.metrics || {
+    treinosMes: 0, metaMensal: 16, progresso: 0, frequenciaMedia: 0, sequencia: 0,
+  };
+  const nome = data?.aluno?.nome || "Aluno";
+
+  const vencimentoFmt = plano.vencimento
+    ? new Date(plano.vencimento).toLocaleDateString("pt-BR")
+    : "—";
 
   return (
     <>
+      {error && (
+        <div className="mt-7 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-xs text-red-700">
+          {error}
+        </div>
+      )}
+
+      {!loading && data && (
+        <div className="mt-6 rounded-2xl border border-brand-100 bg-brand-50/50 px-5 py-3 text-xs text-brand-800">
+          <strong>Olá, {nome}!</strong> Continue firme nos treinos. 💪
+        </div>
+      )}
+
       <section aria-label="Resumo do aluno" className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Meu plano" value="Anual" detail="válido até 15 de março de 2027" trend="Ativo" icon={CreditCard} iconStyle="bg-blue-50 text-blue-600" />
-        <StatCard title="Treinos neste mês" value="12" detail="meta mensal: 16 treinos" trend="75%" icon={Dumbbell} iconStyle="bg-emerald-50 text-emerald-600" />
-        <StatCard title="Sequência atual" value="4 dias" detail="seu recorde é 9 dias" trend="Continue!" icon={Flame} iconStyle="bg-amber-50 text-amber-600" />
-        <StatCard title="Minha frequência" value="85%" detail="presença nos últimos 30 dias" trend="5,2%" icon={Activity} iconStyle="bg-violet-50 text-violet-600" />
+        <StatCard
+          title="Meu plano"
+          value={loading ? "..." : plano.tipo}
+          detail={`válido até ${vencimentoFmt}`}
+          trend={plano.status}
+          icon={CreditCard}
+          iconStyle="bg-blue-50 text-blue-600"
+        />
+        <StatCard
+          title="Treinos neste mês"
+          value={loading ? "..." : String(m.treinosMes)}
+          detail={`meta mensal: ${m.metaMensal} treinos`}
+          trend={`${m.progresso}%`}
+          icon={Dumbbell}
+          iconStyle="bg-emerald-50 text-emerald-600"
+        />
+        <StatCard
+          title="Sequência atual"
+          value={loading ? "..." : `${m.sequencia} dias`}
+          detail="seu recorde é 9 dias"
+          trend="Continue!"
+          icon={Flame}
+          iconStyle="bg-amber-50 text-amber-600"
+        />
+        <StatCard
+          title="Minha frequência"
+          value={loading ? "..." : `${m.frequenciaMedia}%`}
+          detail="presença nos últimos 30 dias"
+          trend="—"
+          icon={Activity}
+          iconStyle="bg-violet-50 text-violet-600"
+        />
       </section>
 
       <section className="mt-5 grid gap-5 xl:grid-cols-[1.3fr_1fr]">
@@ -22,7 +108,7 @@ export default function StudentOverview() {
                 <span className="h-1.5 w-1.5 rounded-full bg-brand-500" /> SEU PRÓXIMO TREINO
               </span>
               <h2 className="mt-4 text-xl font-bold tracking-tight text-slate-900">Treino A · Peito e tríceps</h2>
-              <p className="mt-1.5 text-xs text-slate-500">Hoje às 18:30 · Professor Carlos Mendes</p>
+              <p className="mt-1.5 text-xs text-slate-500">Hoje às 18:30 · Sala de musculação</p>
             </div>
             <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-50 text-brand-600"><Dumbbell size={21} /></span>
           </div>
@@ -40,12 +126,13 @@ export default function StudentOverview() {
           </div>
           <div className="mt-5 flex flex-col gap-3 sm:flex-row">
             <button
-              onClick={() => setCheckedIn((value) => !value)}
+              onClick={fazerCheckin}
+              disabled={checkedIn || checking}
               className={`flex h-11 flex-1 items-center justify-center gap-2 rounded-xl text-xs font-semibold transition ${
-                checkedIn ? "bg-emerald-50 text-emerald-700" : "bg-brand-600 text-white hover:bg-brand-700"
+                checkedIn ? "bg-emerald-50 text-emerald-700" : "bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-60"
               }`}
             >
-              {checkedIn ? <><Check size={15} /> Check-in confirmado</> : <><CalendarCheck size={15} /> Fazer check-in</>}
+              {checkedIn ? <><Check size={15} /> Check-in confirmado</> : checking ? <>Salvando...</> : <><CalendarCheck size={15} /> Fazer check-in</>}
             </button>
             <button className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-100 text-xs font-semibold text-slate-600 transition hover:bg-slate-50">
               Ver ficha de treino <ArrowRight size={14} />
@@ -62,13 +149,18 @@ export default function StudentOverview() {
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600"><Target size={19} /></span>
           </div>
           <div className="mt-6 flex items-end justify-between">
-            <span className="text-3xl font-bold tracking-tight text-slate-900">12 <span className="text-base font-medium text-slate-400">/ 16 treinos</span></span>
-            <span className="text-xs font-semibold text-brand-600">75%</span>
+            <span className="text-3xl font-bold tracking-tight text-slate-900">
+              {loading ? "..." : m.treinosMes}
+              <span className="text-base font-medium text-slate-400"> / {m.metaMensal} treinos</span>
+            </span>
+            <span className="text-xs font-semibold text-brand-600">{m.progresso}%</span>
           </div>
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
-            <div className="h-full w-3/4 rounded-full bg-brand-600" />
+            <div className="h-full rounded-full bg-brand-600" style={{ width: `${Math.min(100, m.progresso)}%` }} />
           </div>
-          <p className="mt-3 text-xs leading-5 text-slate-500">Faltam 4 treinos para alcançar sua meta mensal. Você consegue!</p>
+          <p className="mt-3 text-xs leading-5 text-slate-500">
+            Faltam {Math.max(0, m.metaMensal - m.treinosMes)} treinos para alcançar sua meta mensal. Você consegue!
+          </p>
           <div className="mt-6 border-t border-slate-100 pt-5">
             <p className="text-xs font-semibold text-slate-700">Próximos horários</p>
             <div className="mt-3 flex items-center gap-3">
