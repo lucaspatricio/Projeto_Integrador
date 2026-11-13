@@ -1,18 +1,36 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bell, Mail, MapPin, Save, Settings } from "lucide-react";
 import { FormField } from "../shared/AdminComponents.jsx";
+import { apiRequest } from "../../../lib/api/client.js";
 
 export default function SettingsScreen() {
   const [settings, setSettings] = useState({
-    name: "GestãoFit Academia",
-    email: "contato@gestaofit.com.br",
-    phone: "(11) 3456-7890",
-    address: "Av. dos Autonomistas, 1234 — Osasco, SP",
-    paymentAlerts: true,
-    maintenanceAlerts: true,
+    name: "",
+    email: "",
+    phone: "",
+    address: "",
+    paymentAlerts: false,
+    maintenanceAlerts: false,
     weeklyReport: false,
   });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await apiRequest("/admin/settings");
+        setSettings((current) => ({ ...current, ...data }));
+      } catch (err) {
+        setError(err.message || "Erro ao carregar configurações.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
 
   function updateField(event) {
     const { name, value, type, checked } = event.target;
@@ -23,13 +41,24 @@ export default function SettingsScreen() {
     setSaved(false);
   }
 
+  async function saveSettings(event) {
+    event.preventDefault();
+    try {
+      setSaving(true);
+      setError(null);
+      await apiRequest("/admin/settings", { method: "PUT", body: settings });
+      setSaved(true);
+    } catch (err) {
+      setError(err.message || "Erro ao salvar configurações.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <form
       className="mt-7 grid gap-5 xl:grid-cols-[1.15fr_0.85fr]"
-      onSubmit={(event) => {
-        event.preventDefault();
-        setSaved(true);
-      }}
+      onSubmit={saveSettings}
     >
       <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-soft sm:p-6">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-5">
@@ -76,7 +105,7 @@ export default function SettingsScreen() {
               <input
                 type="checkbox"
                 name={name}
-                checked={settings[name]}
+                checked={Boolean(settings[name])}
                 onChange={updateField}
                 className="mt-0.5 h-4 w-4 accent-[#267345]"
               />
@@ -88,22 +117,30 @@ export default function SettingsScreen() {
             <Mail size={15} />
             <span className="text-xs font-semibold">E-mail administrativo</span>
           </div>
-          <p className="mt-2 text-xs text-slate-500">{settings.email}</p>
+          <p className="mt-2 text-xs text-slate-500">{settings.email || "—"}</p>
         </div>
+
+        {error && (
+          <div className="mt-4 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">
+            {error}
+          </div>
+        )}
+
         <button
           type="submit"
-          className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700"
+          disabled={saving || loading}
+          className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
         >
-          <Save size={15} /> Salvar configurações
+          <Save size={15} /> {saving ? "Salvando..." : "Salvar configurações"}
         </button>
         {saved && (
           <p role="status" className="mt-3 text-center text-xs font-medium text-emerald-700">
-            Configurações salvas nesta sessão.
+            Configurações salvas no banco.
           </p>
         )}
       </section>
       <p className="text-[11px] text-slate-400 xl:col-span-2">
-        Protótipo: as preferências e os dados editados não são enviados para um servidor.
+        Dados carregados do banco MySQL via API.
       </p>
     </form>
   );
